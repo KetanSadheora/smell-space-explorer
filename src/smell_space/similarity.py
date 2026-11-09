@@ -58,6 +58,33 @@ def compute_cosine_similarity(
     return similarity
 
 
+def cosine_similarity_to_query(
+    query_embedding: np.ndarray,
+    embeddings: np.ndarray,
+) -> np.ndarray:
+    """Compute cosine similarity from one query embedding to a matrix.
+
+    Raises:
+        ValueError: If the query or matrix dimensions are inconsistent or a
+            zero-length vector is supplied.
+    """
+    query = np.asarray(query_embedding, dtype=np.float32).reshape(-1)
+    matrix = np.asarray(embeddings, dtype=np.float32)
+    if matrix.ndim != 2 or matrix.shape[1] != query.shape[0]:
+        raise ValueError(
+            "Query and embedding matrix dimensions are inconsistent: "
+            f"{query.shape} vs {matrix.shape}."
+        )
+
+    query_norm = float(np.linalg.norm(query))
+    row_norms = np.linalg.norm(matrix, axis=1)
+    if query_norm == 0.0 or np.any(row_norms == 0.0):
+        raise ValueError("Cosine similarity is undefined for zero vectors.")
+
+    normalized_matrix = matrix / row_norms[:, None]
+    return normalized_matrix @ (query / query_norm)
+
+
 def top_k_neighbor_indices(
     similarity_row: np.ndarray,
     k: int,

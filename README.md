@@ -9,11 +9,11 @@ analysis in a Streamlit app. The goal is exploratory: find molecules that are
 structurally dissimilar (low Morgan/Tanimoto similarity) but perceptually close
 (high cosine similarity in OpenPOM space).
 
-> **Refactor status:** Phase 1 (repository extraction) is complete. The original
-> notebook's fabricated fallback for unseen molecules has been isolated and is
-> not used by the app. Checkpoint-backed inference is the next phase; until it
-> lands, the app reports unseen molecules as unavailable rather than inventing
-> an odor profile. See [Limitations](#limitations).
+> **Refactor status:** Phase 2 (real model inference) is complete. Unseen
+> molecules now run through the trained MPNN and receive probabilities for all
+> 138 descriptors plus a 256-D embedding; no fallback predictions are used.
+> Optimization and the test suite are still pending. See
+> [Limitations](#limitations).
 
 ## Screenshots
 
@@ -135,11 +135,29 @@ This writes:
 streamlit run app/streamlit_app.py
 ```
 
-The app shows known dataset entries with their curated labels, their UMAP
-position, and their nearest neighbors in OpenPOM embedding space. Real
-checkpoint-backed prediction and neighbor retrieval for **new** molecules are
-implemented in the next refactor phase; the app does not display fabricated
+Known dataset entries show their curated labels, UMAP position, and nearest
+neighbors. For an unseen SMILES, the app runs the trained MPNN, displays the top
+predicted descriptors and radar chart, and retrieves nearest neighbors using
+that query's own 256-D embedding. If no checkpoint exists, the app shows an
+instruction to run `scripts/train.py`; it never displays fabricated
 predictions.
+
+### Single-molecule inference API
+
+```python
+from smell_space.inference import predict_odor_profile
+
+result = predict_odor_profile("COc1cc(C=O)ccc1O", top_n=5)
+print(result.top_predictions)          # five highest probabilities
+print(len(result.probabilities))      # all 138, sorted descending
+print(result.embedding.shape)         # (256,)
+```
+
+The model, featurizer, and task names are loaded lazily once per process and
+reused. Invalid SMILES raise `ValueError`; a missing checkpoint raises
+`FileNotFoundError` with the training command. Re-run
+`scripts/extract_embeddings.py` whenever you train a new checkpoint so the
+dataset embeddings and the query model come from the same weights.
 
 ## Cross-scaffold discovery
 

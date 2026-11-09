@@ -6,8 +6,7 @@ Run from the repository root with:
 
 from __future__ import annotations
 
-import logging
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 import pandas as pd
@@ -24,12 +23,12 @@ from smell_space.config import (
     METADATA_PATH,
 )
 from smell_space.data import get_task_columns, load_curated_dataframe
+from smell_space.inference import OdorPrediction, predict_odor_profile
 from smell_space.similarity import (
     compute_cosine_similarity,
+    cosine_similarity_to_query,
     top_k_neighbor_indices,
 )
-
-logger = logging.getLogger(__name__)
 
 st.set_page_config(
     page_title="Smell Space Explorer",
@@ -49,7 +48,7 @@ PRESETS: dict[str, str] = {
 
 @st.cache_resource(show_spinner="Loading OpenPOM embeddings and dataset...")
 def load_artifacts() -> tuple[np.ndarray, pd.DataFrame, pd.DataFrame, list[str]]:
-    """Load embeddings, metadata, labels, and the cached cosine matrix once."""
+    """Load embeddings, metadata, labels, and task names once per process."""
     missing = [
         str(path)
         for path in (EMBEDDINGS_PATH, METADATA_PATH, DATASET_PATH)
@@ -82,27 +81,35 @@ def embedding_similarity(embeddings: np.ndarray) -> np.ndarray:
 
 
 def active_descriptors(row: np.ndarray, task_columns: list[str]) -> list[str]:
-    """Return descriptor names active for one label row."""
-    return [
-        task_columns[index]
-        for index in np.flatnonzero(row > 0.5)
-    ]
+    """Return descriptor names active in one curated label row."""
+    return [task_columns[index] for index in np.flatnonzero(row > 0.5)]
 
 
-def radar_figure(descriptors: list[str]) -> go.Figure:
-    """Build a radar chart of positive descriptors."""
+def radar_figure(
+    labels: Sequence[str],
+    values: Sequence[float],
+) -> go.Figure:
+    """Build a radar chart from descriptor labels and real probabilities."""
+    if len(labels) != len(values):
+        raise ValueError("Radar labels and values must have equal length.")
     figure = go.Figure(
         data=go.Scatterpolar(
-            r=[1.0] * len(descriptors),
-            theta=descriptors,
+            r=[float(value) for value in values],
+            theta=list(labels),
             fill="toself",
             line={"color": "#ab63fa"},
         )
     )
     figure.update_layout(
-        polar={"radialaxis": {"visible": False, "range": [0, 1.05]}},
+        polar={
+            "radialaxis": {
+                "visible": True,
+                "range": [0, 1.0],
+                "tickformat": ".2f",
+            }
+        },
         showlegend=False,
-        height=320,
+        height=350,
         margin={"l": 40, "r": 40, "t": 20, "b": 20},
     )
     return figure
@@ -115,6 +122,45 @@ def render_molecule(smiles: str, caption: str) -> None:
         st.warning("This SMILES could not be rendered.")
         return
     st.image(Draw.MolToImage(molecule, size=(320, 240)), caption=caption)
+
+
+def neighbor_table(
+    metadata: pd.DataFrame,
+    smiles_column: str,
+    scores: np.ndarray,
+    neighbor_indices: np.ndarray,
+) -> pd.DataFrame:
+    """Build the nearest-neighbor display table."""
+    rows: list[dict[str, Any]] = []
+    for rank, neighbor_index in enumerate(neighbor_indices, start=1):
+        neighbor = metadata.iloc[neighbor_index]
+        rows.append(
+            {
+                "Rank": rank,
+                "Neighbor name": neighbor.get("name", "Unknown"),
+                "Neighbor SMILES": neighbor[smiles_column],
+                "Dominant family": neighbor.get("dominant_family", "Unknown"),
+                "OpenPOM cosine": f"{scores[neighbor_index]:.4f}",
+                "Known notes": neighbor.get("active_descriptors", "N/A"),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def render_neighbor_structures(
+    metadata: pd.DataFrame,
+    smiles_column: str,
+    neighbor_indices: np.ndarray,
+) -> None:
+    """Render the top three neighbor structures."""
+    st.write("**Top 3 neighbor structures:**")
+    columns = st.columns(3)
+    for rank, neighbor_index in enumerate(neighbor_indices[:3]):
+        with columns[rank]:
+            render_molecule(
+                str(metadata.iloc[neighbor_index][smiles_column]),
+                caption=f"Rank {rank + 1}",
+            )
 
 
 def main() -> None:
@@ -161,6 +207,11 @@ def main() -> None:
     matched_rows = metadata[metadata[smiles_column] == query_smiles]
     match_index = int(matched_rows.index[0]) if len(matched_rows) else None
 
+    prediction: OdorPrediction | None = None
+    query_embedding: np.ndarray | None = None
+    query_scores: np.ndarray | None = None
+    excluded_index: int | None = None
+
     column_structure, column_prediction = st.columns([1, 1.5])
     with column_structure:
         st.subheader("2D Molecular Structure")
@@ -182,16 +233,75 @@ def main() -> None:
             )[:8]
             if descriptors:
                 st.plotly_chart(
-                    radar_figure(descriptors),
+                    radar_figure(descriptors, [1.0] * len(descriptors)),
                     use_container_width=True,
                 )
+            query_embedding = embeddings[match_index]
+            query_scores = similarity[match_index]
+            excluded_index = match_index
         else:
-            match_index = None
             st.info(
-                "Unseen molecule. This molecule is not in the curated dataset; "
-                "the checkpoint-backed predictor is not yet connected in this "
-                "repository build."
+                "Unseen molecule: generating a checkpoint-backed OpenPOM "
+                "prediction. These are model estimates, not experimental labels."
             )
+            try:
+                with st.spinner("Running OpenPOM inference..."):
+                    prediction = predict_odor_profile(query_smiles, top_n=8)
+            except (FileNotFoundError, ValueError, RuntimeError) as error:
+                st.error(str(error))
+                st.info(
+                    "Train a checkpoint with `python scripts/train.py`; the app "
+                    "never substitutes invented predictions."
+                )
+            else:
+                st.success("Real OpenPOM prediction (not experimental ground truth)")
+                st.caption(f"Canonical SMILES: `{prediction.canonical_smiles}`")
+                top_pairs = prediction.top_predictions
+                st.dataframe(
+                    pd.DataFrame(
+                        {
+                            "Descriptor": [name for name, _ in top_pairs],
+                            "Probability": [score for _, score in top_pairs],
+                        }
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+                st.plotly_chart(
+                    radar_figure(
+                        [name for name, _ in top_pairs],
+                        [score for _, score in top_pairs],
+                    ),
+                    use_container_width=True,
+                )
+                with st.expander("All 138 descriptor probabilities"):
+                    st.dataframe(
+                        pd.DataFrame(
+                            {
+                                "Descriptor": [
+                                    name for name, _ in prediction.probabilities
+                                ],
+                                "Probability": [
+                                    score for _, score in prediction.probabilities
+                                ],
+                            }
+                        ),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+                query_embedding = prediction.embedding
+                query_scores = cosine_similarity_to_query(
+                    prediction.embedding,
+                    embeddings,
+                )
+
+    neighbor_indices: np.ndarray | None = None
+    if query_scores is not None:
+        neighbor_indices = top_k_neighbor_indices(
+            query_scores,
+            DEFAULT_TOP_K,
+            exclude_index=excluded_index,
+        )
 
     st.markdown("---")
     tab_neighbors, tab_map = st.tabs(
@@ -200,42 +310,23 @@ def main() -> None:
 
     with tab_neighbors:
         st.subheader("Top 'smells-like' neighbors in the 256-D OpenPOM space")
-        if match_index is None:
+        if neighbor_indices is None or query_scores is None:
             st.info(
-                "Nearest-neighbor retrieval for unseen molecules requires their "
-                "model embedding and will be available with model-backed inference."
+                "Nearest neighbors become available when a real query embedding "
+                "can be computed. No placeholder neighbors are shown."
             )
         else:
-            neighbor_indices = top_k_neighbor_indices(
-                similarity[match_index],
-                DEFAULT_TOP_K,
-                exclude_index=match_index,
+            st.dataframe(
+                neighbor_table(
+                    metadata,
+                    smiles_column,
+                    query_scores,
+                    neighbor_indices,
+                ),
+                use_container_width=True,
+                hide_index=True,
             )
-            cards: list[dict[str, Any]] = []
-            for rank, neighbor_index in enumerate(neighbor_indices, start=1):
-                neighbor = metadata.iloc[neighbor_index]
-                cards.append(
-                    {
-                        "Rank": rank,
-                        "Neighbor name": neighbor.get("name", "Unknown"),
-                        "Neighbor SMILES": neighbor[smiles_column],
-                        "Dominant family": neighbor.get(
-                            "dominant_family", "Unknown"
-                        ),
-                        "OpenPOM cosine": f"{similarity[match_index, neighbor_index]:.4f}",
-                        "Known notes": neighbor.get("active_descriptors", "N/A"),
-                    }
-                )
-            st.dataframe(pd.DataFrame(cards), use_container_width=True)
-
-            st.write("**Top 3 neighbor structures:**")
-            columns = st.columns(3)
-            for rank, neighbor_index in enumerate(neighbor_indices[:3]):
-                with columns[rank]:
-                    render_molecule(
-                        str(metadata.iloc[neighbor_index][smiles_column]),
-                        caption=f"Rank {rank + 1}",
-                    )
+            render_neighbor_structures(metadata, smiles_column, neighbor_indices)
 
     with tab_map:
         st.subheader("Position in the 2D latent olfactory space")
@@ -258,6 +349,25 @@ def main() -> None:
                 text=["QUERY"],
                 textposition="top center",
                 name="Query molecule",
+            )
+        elif neighbor_indices is not None:
+            neighbors = metadata.iloc[neighbor_indices]
+            figure.add_scatter(
+                x=neighbors["umap_x"],
+                y=neighbors["umap_y"],
+                mode="markers",
+                marker={
+                    "color": "black",
+                    "size": 10,
+                    "symbol": "diamond",
+                    "line": {"color": "white", "width": 1},
+                },
+                text=[f"Neighbor {rank}" for rank in range(1, len(neighbors) + 1)],
+                name="Nearest neighbors",
+            )
+            st.caption(
+                "An unseen query has no UMAP coordinate, so its nearest "
+                "neighbors are highlighted instead."
             )
         st.plotly_chart(figure, use_container_width=True)
 
