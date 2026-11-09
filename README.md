@@ -120,8 +120,31 @@ python scripts/train.py --epochs 25
 Training writes DeepChem checkpoints under `models/openpom_scaffold/`. Use
 `--resume` to continue from the most recent checkpoint. Training on CPU is
 expensive; GPU is not required by the code but is supported by the underlying
-stack. The training schedule and model hyperparameters match the original
+stack. The default schedule and model hyperparameters match the original
 notebook.
+
+Optional training controls are off by default so the default run is unchanged:
+
+| Flag | Default | Effect |
+| --- | --- | --- |
+| `--eval-every N` | `5` | Evaluate every N epochs, plus the first and last. |
+| `--train-eval-max-samples N` | `0` | Evaluate train AUROC on N random molecules; `0` uses the full train set. |
+| `--valid-fraction F` | `0` | Hold out a stratified validation fraction; `0` keeps train = validation as before. |
+| `--early-stopping-patience N` | `0` | Stop after N evaluations without validation-AUROC improvement; requires `--valid-fraction`. |
+| `--save-best-checkpoint` | off | Restore and save the best validation weights. |
+| `--seed N` | unset | Seed Python/NumPy/PyTorch and the split; omit to preserve the original non-seeded behavior. |
+
+Example opt-in run:
+
+```bash
+python scripts/train.py \
+  --epochs 30 \
+  --valid-fraction 0.1 \
+  --early-stopping-patience 3 \
+  --train-eval-max-samples 512 \
+  --save-best-checkpoint \
+  --seed 42
+```
 
 ## Build embeddings and the UMAP map
 
