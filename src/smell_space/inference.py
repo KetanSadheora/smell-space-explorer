@@ -18,12 +18,10 @@ from rdkit import Chem
 
 from .config import MODEL_DIR
 from .data import get_task_columns, load_curated_dataframe
-from .embeddings import _find_penultimate_linear
+from .embeddings import EMBEDDING_DIMENSION, _find_penultimate_linear
 from .model import build_model
 
 logger = logging.getLogger(__name__)
-
-EMBEDDING_DIMENSION = 256
 
 
 @dataclass(frozen=True)

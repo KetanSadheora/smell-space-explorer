@@ -13,6 +13,9 @@ from .config import DEFAULT_SEED
 
 logger = logging.getLogger(__name__)
 
+EMBEDDING_LAYER_NAME = "ffn.linears.2"
+EMBEDDING_DIMENSION = 256
+
 ODOR_FAMILIES: dict[str, list[str]] = {
     "Fruity/Citrus": [
         "fruity",
@@ -146,23 +149,50 @@ def get_dominant_family(active_tasks: Iterable[str]) -> str:
 
 
 def _find_penultimate_linear(model: Any) -> nn.Linear:
-    """Return the linear layer whose input is the 256-D POM embedding."""
-    target_layer = None
-    for module in reversed(list(model.model.modules())):
-        if isinstance(module, nn.Linear):
-            target_layer = module
-            break
-    if target_layer is None:
-        raise RuntimeError("No nn.Linear layer found in the OpenPOM model.")
+    """Return the named linear layer whose input is the 256-D POM embedding.
+
+    The fixed OpenPOM FFN is ``256 -> 300 -> 256 -> 138``. Its output layer is
+    ``ffn.linears.2``, and the input to that layer is the 256-D embedding used
+    by the original notebook hook.
+    """
+    try:
+        target_layer = model.model.get_submodule(EMBEDDING_LAYER_NAME)
+    except AttributeError as error:
+        raise RuntimeError(
+            "The OpenPOM model does not expose the expected embedding layer "
+            f"{EMBEDDING_LAYER_NAME!r}."
+        ) from error
+    if not isinstance(target_layer, nn.Linear):
+        raise RuntimeError(
+            f"{EMBEDDING_LAYER_NAME!r} is not an nn.Linear layer."
+        )
+    if target_layer.in_features != EMBEDDING_DIMENSION:
+        raise RuntimeError(
+            f"Expected {EMBEDDING_LAYER_NAME!r} to consume a "
+            f"{EMBEDDING_DIMENSION}-D embedding, got "
+            f"{target_layer.in_features}."
+        )
     return target_layer
 
 
 def extract_embeddings(model: Any, dataset: Any) -> np.ndarray:
-    """Extract the 256-D penultimate embedding for every dataset molecule."""
+    """Extract the 256-D penultimate embedding for every dataset molecule.
+
+    Prediction runs in batches via ``model.predict`` under ``torch.no_grad``.
+    The hook captures the input to the named 256-D output layer.
+    """
+    import torch
+
     py_model = model.model
     py_model.eval()
     captured: list[np.ndarray] = []
     target_layer = _find_penultimate_linear(model)
+    logger.info(
+        "Hooked %s (in_features=%d); batch_size=%s",
+        EMBEDDING_LAYER_NAME,
+        target_layer.in_features,
+        getattr(model, "batch_size", "unknown"),
+    )
 
     def capture_input(
         _module: nn.Module,
@@ -173,13 +203,19 @@ def extract_embeddings(model: Any, dataset: Any) -> np.ndarray:
 
     hook = target_layer.register_forward_hook(capture_input)
     try:
-        model.predict(dataset)
+        with torch.no_grad():
+            model.predict(dataset)
     finally:
         hook.remove()
 
     if not captured:
         raise RuntimeError("Embedding extraction produced no activations.")
     embeddings = np.concatenate(captured, axis=0)[: len(dataset)]
+    if embeddings.shape != (len(dataset), EMBEDDING_DIMENSION):
+        raise RuntimeError(
+            "Expected embedding shape "
+            f"{(len(dataset), EMBEDDING_DIMENSION)}, got {embeddings.shape}."
+        )
     logger.info("Extracted embeddings with shape %s", embeddings.shape)
     return embeddings
 
