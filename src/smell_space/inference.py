@@ -18,6 +18,7 @@ from rdkit import Chem
 
 from .config import MODEL_DIR
 from .data import get_task_columns, load_curated_dataframe
+from .embeddings import _find_penultimate_linear
 from .model import build_model
 
 logger = logging.getLogger(__name__)
@@ -189,6 +190,18 @@ def predict_odor_profile(smiles: str, top_n: int = 5) -> OdorPrediction:
     batched_graph = dgl.batch([graph]).to(model.device)
 
     model.model.eval()
+    captured_embeddings: list[np.ndarray] = []
+    target_layer = _find_penultimate_linear(model)
+
+    def capture_embedding(
+        _module: Any,
+        layer_inputs: tuple[Any, ...],
+    ) -> None:
+        captured_embeddings.append(
+            layer_inputs[0].detach().cpu().numpy()
+        )
+
+    hook = target_layer.register_forward_pre_hook(capture_embedding)
     try:
         with torch.no_grad():
             outputs = model.model(batched_graph)
@@ -196,23 +209,21 @@ def predict_odor_profile(smiles: str, top_n: int = 5) -> OdorPrediction:
         raise RuntimeError(
             f"The OpenPOM forward pass failed for {canonical_smiles}."
         ) from error
+    finally:
+        hook.remove()
 
     if not isinstance(outputs, tuple) or len(outputs) != 3:
         raise RuntimeError(
             "The OpenPOM model returned an unexpected output. Expected "
             "(probabilities, logits, embedding)."
         )
-    probability_tensor, _logits, embedding_tensor = outputs
+    if not captured_embeddings:
+        raise RuntimeError("The OpenPOM embedding layer was never called.")
+    probability_tensor, _logits, _model_embedding = outputs
     probabilities = (
         probability_tensor.detach().cpu().numpy().astype(float).reshape(-1)
     )
-    embedding = (
-        embedding_tensor.detach()
-        .cpu()
-        .numpy()
-        .astype(np.float32)
-        .reshape(-1)
-    )
+    embedding = np.asarray(captured_embeddings[0], dtype=np.float32).reshape(-1)
 
     if probabilities.shape[0] != len(task_columns):
         raise RuntimeError(

@@ -65,23 +65,32 @@ pip install torch==2.1.2 --index-url https://download.pytorch.org/whl/cpu
 
 pip install -r requirements.txt
 pip install -e . --no-deps
+
+# If DGL fails to import because of the optional GraphBolt extension:
+python scripts/patch_dgl.py
 ```
 
-The install was not executed inside the refactoring environment because this
-machine only has Python 3.12/3.15; the repository targets Python 3.10. Treat the
-pins as a reproducible starting point and verify them on your platform.
+The editable install was verified in the project's Python 3.10 conda
+environment with `pip install -e . --no-deps`, followed by
+`python -c "import smell_space"` from outside the repository. The exact
+dependency versions in that working environment may differ from the pinned
+set; treat the pins as a reproducible starting point.
 
 ### DGL GraphBolt note
 
-The original Colab notebook overwrote
-`dgl/graphbolt/__init__.py` with a stub that disables GraphBolt. That edit is
-**not** reproduced here. OpenPOM uses DGL's message-passing APIs, not GraphBolt,
-and the pinned DGL 2.1.0 wheel should provide a matching library. If
-`import dgl` fails with "Cannot load Graphbolt C++ library", the DGL wheel and
-PyTorch build do not match: reinstall a DGL 2.1.0 wheel built for your
-torch/CUDA combination. Do not patch installed package files by hand. If you
-must reuse the old stub as a last resort, know that it disables GraphBolt
-globally and is unsupported; it is not needed for the code in this repository.
+Some DGL/PyTorch combinations fail while importing DGL's optional GraphBolt
+extension even though OpenPOM does not use GraphBolt. The repository includes an
+idempotent helper that installs the minimal stub used by the original notebook:
+
+```bash
+python scripts/patch_dgl.py
+```
+
+The script finds `dgl/graphbolt/__init__.py` through `sys.prefix` and
+`site.getsitepackages()` without importing `dgl` first, so it works when
+`import dgl` itself is failing. Running it more than once is safe: it reports
+`already patched` if the stub is already present. The stub disables GraphBolt
+globally, so apply it only when the import error requires it.
 
 ## Data
 
