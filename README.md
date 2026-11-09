@@ -9,11 +9,12 @@ analysis in a Streamlit app. The goal is exploratory: find molecules that are
 structurally dissimilar (low Morgan/Tanimoto similarity) but perceptually close
 (high cosine similarity in OpenPOM space).
 
-> **Refactor status:** Phase 2 (real model inference) is complete. Unseen
-> molecules now run through the trained MPNN and receive probabilities for all
-> 138 descriptors plus a 256-D embedding; no fallback predictions are used.
-> Optimization and the test suite are still pending. See
-> [Limitations](#limitations).
+> **Status:** the notebook refactor, real checkpoint-backed inference,
+> similarity optimizations, and test suite are complete. Unseen molecules run
+> through the trained MPNN and receive probabilities for all 138 descriptors
+> plus a 256-D embedding; no fallback predictions are used. AUROC has not been
+> re-measured in this refactor, so the evaluation table below remains a
+> placeholder. See [Limitations](#limitations).
 
 ## Screenshots
 
@@ -40,6 +41,7 @@ smell-space-explorer/
     train.py
     extract_embeddings.py
     find_cross_scaffold_pairs.py
+    patch_dgl.py
   src/smell_space/
     config.py                   # paths and environment overrides
     data.py                     # download, column handling, featurization
@@ -48,6 +50,7 @@ smell-space-explorer/
     inference.py                # single-molecule inference
     similarity.py               # cosine retrieval and scaffold discovery
   tests/
+    reference.py                # original loop implementations for equivalence
 ```
 
 ## Installation
@@ -157,6 +160,7 @@ python scripts/extract_embeddings.py
 This writes:
 
 - `results/embeddings/openpom_embeddings_256d.npy` — shape `(n_molecules, 256)`
+- `results/embeddings/openpom_cosine_similarity_float32.npy` — cached cosine matrix
 - `results/embeddings/molecules_metadata_umap.csv`
 - `results/figures/umap_odor_space.png`
 - `results/figures/umap_odor_space.html`
@@ -206,10 +210,12 @@ The default criteria are OpenPOM cosine **> 0.88** and Morgan (ECFP4) Tanimoto
 
 > **TODO:** Fill in every value below from the real training/evaluation run.
 > These are placeholders, not reported results. Do not merge invented numbers.
+> No AUROC evaluation was run during this refactor; the existing checkpoint was
+> restored and used only for prediction and embedding checks.
 
 | Split | Macro AUROC | Micro AUROC | Notes |
 | --- | --- | --- | --- |
-| Test | TODO | TODO | TODO: populated by `scripts/train.py` |
+| Test | TODO | TODO | TODO: from a held-out evaluation run |
 | Validation | TODO | TODO | TODO: early-stopping split |
 | Train (subsample) | TODO | TODO | TODO: for monitoring only |
 
@@ -225,9 +231,18 @@ repository.
 pytest
 ```
 
-Tests cover invalid SMILES handling, vectorized Tanimoto equivalence, top-k
-retrieval, the 138-task column contract, and embedding shape. Model-dependent
-tests are marked `slow` and skip when no checkpoint or dataset is available.
+The suite covers invalid SMILES handling, vectorized Tanimoto equivalence
+against the original RDKit loops, top-k `argpartition` equivalence, cosine-cache
+round trips, the CSV-hash cache rebuild, the seeded/stratified split utility, the
+138-task column contract, and embedding shape. Model-dependent tests are marked
+`slow` and skip when no checkpoint or dataset is available. The local suite
+currently reports **15 passed**; the exact count can change as tests are added.
+
+The notebook is output-free. To keep it that way, install `nbstripout` once:
+
+```bash
+nbstripout --install
+```
 
 ## Model weights and embeddings
 
@@ -249,10 +264,13 @@ repository.
 
 - The UMAP projection uses `n_neighbors=15`, `min_dist=0.1`, cosine metric, and
   `random_state=42`.
-- Exact numerical reproduction also depends on the pinned PyTorch/DGL/DeepChem
-  versions and CPU/GPU kernels.
-- Deterministic training, seeded data splits, and CSV-hash-keyed featurization
-  caches are tracked as follow-up work in the optimization phase.
+- `--seed N` seeds Python, NumPy, PyTorch, and the validation split. Seeding is
+  opt-in so the default training path remains unchanged.
+- The DeepChem featurization cache stores the source CSV SHA-256 and is rebuilt
+  when that digest, the task columns, or the cache version changes.
+- The 256-D cosine matrix is cached as float32 and reused by the app.
+- Exact numerical reproduction also depends on the installed
+  PyTorch/DGL/DeepChem versions and CPU/GPU kernels.
 
 ## Credits and citations
 

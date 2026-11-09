@@ -9,6 +9,7 @@ dist/
 venv/
 .pytest_cache/
 .pytest-tmp/
+pytest-cache-files-*/
 tests/_tmp*
 .mypy_cache/
 .ruff_cache/
@@ -36,6 +37,7 @@ results/embeddings/*
 results/retrieval/*
 !results/retrieval/.gitkeep
 results/figures/*.html
+results/figures/cross_scaffold_pairs.png
 
 # Operating system files
 .DS_Store
