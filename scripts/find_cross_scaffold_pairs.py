@@ -21,8 +21,8 @@ from smell_space.config import (
 )
 from smell_space.data import find_smiles_column
 from smell_space.similarity import (
-    compute_cosine_similarity,
     evaluate_cross_scaffold_pairs,
+    load_or_compute_cosine_similarity,
     morgan_fingerprints,
 )
 
@@ -95,7 +95,7 @@ def main() -> None:
 
     smiles_column = find_smiles_column(metadata)
     fingerprints = morgan_fingerprints(metadata[smiles_column].astype(str).tolist())
-    similarity = compute_cosine_similarity(embeddings)
+    similarity = load_or_compute_cosine_similarity(embeddings)
     pairs = evaluate_cross_scaffold_pairs(
         metadata,
         similarity,

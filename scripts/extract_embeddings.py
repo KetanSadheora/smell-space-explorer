@@ -23,6 +23,10 @@ from smell_space.embeddings import (
     run_umap,
 )
 from smell_space.model import build_model
+from smell_space.similarity import (
+    compute_cosine_similarity,
+    save_cosine_similarity,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +102,10 @@ def main() -> None:
 
     np.save(EMBEDDINGS_PATH, embeddings)
     logger.info("Saved embeddings %s to %s", embeddings.shape, EMBEDDINGS_PATH)
+
+    similarity = compute_cosine_similarity(embeddings)
+    save_cosine_similarity(similarity)
+    logger.info("Saved cosine similarity cache %s", similarity.shape)
 
     umap_projection = run_umap(embeddings)
     smiles_column = find_smiles_column(raw_dataframe)
