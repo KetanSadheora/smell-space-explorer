@@ -23,10 +23,14 @@ from smell_space.config import (
     METADATA_PATH,
 )
 from smell_space.data import get_task_columns, load_curated_dataframe
-from smell_space.inference import OdorPrediction, predict_odor_profile
+from smell_space.inference import (
+    OdorPrediction,
+    get_model,
+    predict_odor_profile,
+)
 from smell_space.similarity import (
-    compute_cosine_similarity,
     cosine_similarity_to_query,
+    load_or_compute_cosine_similarity,
     top_k_neighbor_indices,
 )
 
@@ -47,7 +51,12 @@ PRESETS: dict[str, str] = {
 
 
 @st.cache_resource(show_spinner="Loading OpenPOM embeddings and dataset...")
-def load_artifacts() -> tuple[np.ndarray, pd.DataFrame, pd.DataFrame, list[str]]:
+def load_artifacts() -> tuple[
+    np.ndarray,
+    pd.DataFrame,
+    list[str],
+    np.ndarray,
+]:
     """Load embeddings, metadata, labels, and task names once per process."""
     missing = [
         str(path)
@@ -71,13 +80,20 @@ def load_artifacts() -> tuple[np.ndarray, pd.DataFrame, pd.DataFrame, list[str]]
             f"{len(embeddings)}, {len(metadata)}, {len(labels)}."
         )
 
-    return embeddings, metadata, dataset_df, task_columns
+    return embeddings, metadata, task_columns, labels
 
 
-@st.cache_data(show_spinner=False)
-def embedding_similarity(embeddings: np.ndarray) -> np.ndarray:
-    """Compute and cache the pairwise cosine matrix for this session."""
-    return compute_cosine_similarity(embeddings).astype(np.float32)
+@st.cache_data(show_spinner="Loading cached cosine similarity matrix...")
+def load_similarity_matrix() -> np.ndarray:
+    """Load the float32 cosine cache, computing it once only if absent."""
+    embeddings = np.load(EMBEDDINGS_PATH, allow_pickle=False)
+    return load_or_compute_cosine_similarity(embeddings)
+
+
+@st.cache_resource(show_spinner="Loading OpenPOM model...")
+def load_model_resource() -> Any:
+    """Load and cache the trained OpenPOM model for this Streamlit process."""
+    return get_model()
 
 
 def active_descriptors(row: np.ndarray, task_columns: list[str]) -> list[str]:
@@ -171,7 +187,8 @@ def main() -> None:
     )
 
     try:
-        embeddings, metadata, dataset_df, task_columns = load_artifacts()
+        embeddings, metadata, task_columns, labels = load_artifacts()
+        similarity = load_similarity_matrix()
     except (FileNotFoundError, ValueError) as error:
         st.error(str(error))
         st.info(
@@ -179,8 +196,6 @@ def main() -> None:
             "artifacts with `python scripts/extract_embeddings.py`."
         )
         st.stop()
-
-    similarity = embedding_similarity(embeddings)
 
     with st.sidebar:
         st.header("Molecule input")
@@ -228,7 +243,7 @@ def main() -> None:
                 f"`{row.get('active_descriptors', 'N/A')}`"
             )
             descriptors = active_descriptors(
-                dataset_df[task_columns].fillna(0).to_numpy()[match_index],
+                labels[match_index],
                 task_columns,
             )[:8]
             if descriptors:
@@ -245,6 +260,7 @@ def main() -> None:
                 "prediction. These are model estimates, not experimental labels."
             )
             try:
+                load_model_resource()
                 with st.spinner("Running OpenPOM inference..."):
                     prediction = predict_odor_profile(query_smiles, top_n=8)
             except (FileNotFoundError, ValueError, RuntimeError) as error:
