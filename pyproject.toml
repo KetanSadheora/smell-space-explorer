@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smell-space"
+version = "0.1.0"
+description = "OpenPOM odor prediction, 256-D embeddings, and cross-scaffold discovery"
+readme = "README.md"
+requires-python = ">=3.10,<3.12"
+license = { text = "MIT" }
+authors = [{ name = "Smell Space Explorer contributors" }]
+keywords = ["cheminformatics", "olfaction", "openpom", "deepchem", "umap"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Scientific/Engineering :: Chemistry",
+]
+# Install the pinned scientific stack with `pip install -r requirements.txt`.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest==8.3.3", "nbstripout==0.7.1"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["smell_space*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra"
+markers = [
+    "slow: tests that require model weights or the full dataset",
+]

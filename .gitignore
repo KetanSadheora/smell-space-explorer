@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Notebook checkpoints and tooling
+.ipynb_checkpoints/
+.nbstripout
+
+# Data and caches
+data/*
+!data/.gitkeep
+disk_dataset/
+*.part
+
+# Model checkpoints
+models/*
+!models/.gitkeep
+*.pt
+*.pth
+*.ckpt
+
+# Generated embeddings and large result artifacts
+results/embeddings/*
+!results/embeddings/.gitkeep
+results/retrieval/*
+!results/retrieval/.gitkeep
+results/figures/*.html
+
+# Operating system files
+.DS_Store
+Thumbs.db

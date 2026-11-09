@@ -1,0 +1,22 @@
+# Python 3.10 environment for the OpenPOM / DeepChem stack.
+# The four versions pinned in the original notebook are preserved:
+# numpy==1.26.4, scipy==1.13.1, pandas==2.2.2, scikit-learn==1.5.2.
+# Remaining packages are pinned to compatible releases from the notebook era.
+numpy==1.26.4
+scipy==1.13.1
+pandas==2.2.2
+scikit-learn==1.5.2
+torch==2.1.2
+dgl==2.1.0
+dgllife==0.3.2
+deepchem==2.8.0
+rdkit==2024.9.6
+openpom==1.0.0
+scikit-multilearn==0.2.0
+iterative-stratification==0.1.9
+umap-learn==0.5.6
+plotly==5.24.1
+streamlit==1.38.0
+tqdm==4.66.5
+matplotlib==3.9.2
+pytest==8.3.3
