@@ -1,0 +1,44 @@
+{
+  "checkpoint": "models\\openpom_eval_split42\\checkpoint1.pt",
+  "dataset_sha256": "0c18b6e9f0f99b772203ba4da30a96b3d60db700349376cbafe23512a9baa704",
+  "epochs_trained": 30.0,
+  "evaluated_at": "2026-11-10T06:38:12.899020+00:00",
+  "git_commit": "2ca211b6a9fd1001dc9ab3b14a38e41f5d5dbdd0",
+  "global_step": 960,
+  "model_dir": "models\\openpom_eval_split42",
+  "seed": 42,
+  "split_file": "D:\\opempm\\smell-space-explorer\\results\\splits\\split_seed42.json",
+  "split_hash": "aa917375bd24e139788d83bcd9da1949c3ebe2e4dae6209205bc71bf97986015",
+  "splits": {
+    "test": {
+      "macro_auroc": 0.861950319528166,
+      "mean_task_auroc": 0.861950319528166,
+      "micro_auroc": 0.911583377533935,
+      "n_molecules": 498,
+      "n_tasks": 138,
+      "n_tasks_evaluated": 138,
+      "n_tasks_skipped": 0,
+      "skipped_tasks": []
+    },
+    "train": {
+      "macro_auroc": 0.9254225565932488,
+      "mean_task_auroc": 0.9254225565932488,
+      "micro_auroc": 0.9494109116966308,
+      "n_molecules": 3987,
+      "n_tasks": 138,
+      "n_tasks_evaluated": 138,
+      "n_tasks_skipped": 0,
+      "skipped_tasks": []
+    },
+    "valid": {
+      "macro_auroc": 0.8625946083655253,
+      "mean_task_auroc": 0.8625946083655253,
+      "micro_auroc": 0.9127819200777144,
+      "n_molecules": 498,
+      "n_tasks": 138,
+      "n_tasks_evaluated": 138,
+      "n_tasks_skipped": 0,
+      "skipped_tasks": []
+    }
+  }
+}

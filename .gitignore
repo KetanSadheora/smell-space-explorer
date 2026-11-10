@@ -11,6 +11,10 @@ venv/
 .pytest-tmp/
 pytest-cache-files-*/
 tests/_tmp*
+.mplconfig/
+.chrome-*/
+.edge-*/
+.no_checkpoint/
 .mypy_cache/
 .ruff_cache/
 

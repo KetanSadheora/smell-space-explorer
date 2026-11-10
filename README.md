@@ -10,42 +10,44 @@ structurally dissimilar (low Morgan/Tanimoto similarity) but perceptually close
 (high cosine similarity in OpenPOM space).
 
 > **Status:** the notebook refactor, real checkpoint-backed inference,
-> similarity optimizations, and test suite are complete. Unseen molecules run
-> through the trained MPNN and receive probabilities for all 138 descriptors
-> plus a 256-D embedding; no fallback predictions are used. AUROC has not been
-> re-measured in this refactor, so the evaluation table below remains a
-> placeholder. See [Limitations](#limitations).
+> similarity optimizations, evaluation, and test suite are complete. Unseen
+> molecules run through the trained MPNN and receive probabilities for all 138
+> descriptors plus a 256-D embedding; no fallback predictions are used. See
+> [Limitations](#limitations) and the [evaluation protocol](#evaluation).
 
 ## Screenshots
 
-> **UMAP screenshot TODO:** generate `results/figures/umap_odor_space.png` with
-> `python scripts/extract_embeddings.py`, then replace this note with the image.
->
-> **App screenshot TODO:** add `results/figures/streamlit_app.png` once the app
-> is running against a real trained checkpoint. Do not commit a fabricated
-> screenshot.
+![UMAP projection of the OpenPOM odor space](results/figures/umap.png)
+
+![Streamlit interface showing vanillin and its curated olfactory profile](results/figures/streamlit_app.png)
 
 ## Project structure
 
 ```text
 smell-space-explorer/
+  .github/workflows/tests.yml   # checkpoint-free CI
   app/streamlit_app.py
   data/                         # downloaded CSV and DeepChem cache (ignored)
   models/                       # checkpoints (ignored)
   notebooks/demo.ipynb          # thin, output-free demo
   results/
-    embeddings/                 # .npy embeddings and metadata (ignored)
-    figures/                    # small UMAP/discovery PNGs used by this README
-    retrieval/                  # generated CSVs
+    embeddings/                 # embeddings and cached cosine matrix (ignored)
+    figures/                    # UMAP and app screenshots used by this README
+    splits/                     # seed-42 split indices and prevalence CSV
+    metrics.json                # evaluation summary
+    metrics_per_task.csv        # per-descriptor AUROC
   scripts/
+    create_split.py
     train.py
+    evaluate_split.py
     extract_embeddings.py
     find_cross_scaffold_pairs.py
     patch_dgl.py
   src/smell_space/
     config.py                   # paths and environment overrides
-    data.py                     # download, column handling, featurization
+    data.py                     # data, splits, hash-keyed cache, featurization
     model.py                    # OpenPOM construction and training
+    evaluation.py               # per-task / macro / micro AUROC
     embeddings.py               # 256-D extraction and UMAP
     inference.py                # single-molecule inference
     similarity.py               # cosine retrieval and scaffold discovery
@@ -133,6 +135,7 @@ Optional training controls are off by default so the default run is unchanged:
 | `--eval-every N` | `5` | Evaluate every N epochs, plus the first and last. |
 | `--train-eval-max-samples N` | `0` | Evaluate train AUROC on N random molecules; `0` uses the full train set. |
 | `--valid-fraction F` | `0` | Hold out a stratified validation fraction; `0` keeps train = validation as before. |
+| `--split-file PATH` | unset | Use a saved train/valid/test split; training consumes only train and valid. |
 | `--early-stopping-patience N` | `0` | Stop after N evaluations without validation-AUROC improvement; requires `--valid-fraction`. |
 | `--save-best-checkpoint` | off | Restore and save the best validation weights. |
 | `--seed N` | unset | Seed Python/NumPy/PyTorch and the split; omit to preserve the original non-seeded behavior. |
@@ -162,8 +165,8 @@ This writes:
 - `results/embeddings/openpom_embeddings_256d.npy` — shape `(n_molecules, 256)`
 - `results/embeddings/openpom_cosine_similarity_float32.npy` — cached cosine matrix
 - `results/embeddings/molecules_metadata_umap.csv`
-- `results/figures/umap_odor_space.png`
-- `results/figures/umap_odor_space.html`
+- `results/figures/umap.png`
+- `results/figures/umap.html`
 
 ## Run the Streamlit app
 
@@ -208,22 +211,54 @@ The default criteria are OpenPOM cosine **> 0.88** and Morgan (ECFP4) Tanimoto
 
 ## Evaluation
 
-> **TODO:** Fill in every value below from the real training/evaluation run.
-> These are placeholders, not reported results. Do not merge invented numbers.
-> No AUROC evaluation was run during this refactor; the existing checkpoint was
-> restored and used only for prediction and embedding checks.
+These numbers come from the separate evaluation checkpoint
+`models/openpom_eval_split42`, **not** from the production checkpoint used by
+the app.
 
-| Split | Macro AUROC | Micro AUROC | Notes |
-| --- | --- | --- | --- |
-| Test | TODO | TODO | TODO: from a held-out evaluation run |
-| Validation | TODO | TODO | TODO: early-stopping split |
-| Train (subsample) | TODO | TODO | TODO: for monitoring only |
+| Split | Macro AUROC | Micro AUROC | Tasks evaluated | Tasks skipped |
+| --- | --- | --- | --- | --- |
+| Test | 0.861950 | 0.911583 | 138 | 0 |
+| Validation | 0.862595 | 0.912782 | 138 | 0 |
+| Train | 0.925423 | 0.949411 | 138 | 0 |
 
-Per-descriptor AUROC will be written to
-`results/metrics/per_descriptor_auroc.csv` by the training script once the
-evaluation pipeline is added. The original notebook's error-analysis cell used
-hand-entered AUROC values; those are intentionally not carried into this
-repository.
+Macro AUROC is the unweighted mean of the evaluable per-task AUROCs; mean
+per-task AUROC is therefore the same value. All 138 descriptors had both classes
+in every split, so no tasks were skipped. Raw full-precision values and the
+per-task table are in [`results/metrics.json`](results/metrics.json) and
+[`results/metrics_per_task.csv`](results/metrics_per_task.csv).
+
+### Evaluation protocol
+
+- Split method: `MultilabelStratifiedKFold(n_splits=10, shuffle=True,
+  random_state=42)` from `iterative-stratification`, with 8 folds for training,
+  1 for validation, and 1 for test.
+- Split sizes: **3,987 train / 498 validation / 498 test**.
+- Dataset SHA-256: `0c18b6e9f0f99b772203ba4da30a96b3d60db700349376cbafe23512a9baa704`.
+- Split hash: `aa917375bd24e139788d83bcd9da1949c3ebe2e4dae6209205bc71bf97986015`.
+- Model: same architecture and hyperparameters as the production model, trained
+  on the train split only for 30 epochs, with best-validation checkpoint restore
+  (best validation AUROC 0.8626 at epoch 27).
+- The test split was predicted exactly once, after training. It was not used for
+  early stopping, model selection, or hyperparameter tuning.
+- Evaluation code commit: `2ca211b6a9fd1001dc9ab3b14a38e41f5d5dbdd0`.
+
+**Production model caveat:** the checkpoint used by the Streamlit app
+(`models/openpom_scaffold`) was trained on the **full 4,983-molecule dataset**,
+as established from its 25 full-data epochs and the original
+`train_model(model, dataset, dataset)` code. Dataset molecules shown as
+"verified" in the app were therefore seen during training; their curated labels
+are not held-out predictions. Only the numbers above, from
+`openpom_eval_split42`, are held-out evaluation results.
+
+### Leakage checks
+
+- Exact duplicate `nonStereoSMILES` across splits: **0**.
+- Canonical-SMILES duplicates across splits: **0**.
+- Binary ECFP4 near-duplicate pairs at Tanimoto ≥ 0.99: **222 train–valid**,
+  **271 train–test**, **23 valid–test**. These are fingerprint collisions among
+  long aliphatic chains with different lengths (for example, C8/C12/C16 fatty
+  acids), not duplicate source records. The test macro AUROC (0.86195) is not
+  anomalously high; no split or metric was changed after this check.
 
 ## Tests
 
@@ -233,10 +268,15 @@ pytest
 
 The suite covers invalid SMILES handling, vectorized Tanimoto equivalence
 against the original RDKit loops, top-k `argpartition` equivalence, cosine-cache
-round trips, the CSV-hash cache rebuild, the seeded/stratified split utility, the
-138-task column contract, and embedding shape. Model-dependent tests are marked
-`slow` and skip when no checkpoint or dataset is available. The local suite
-currently reports **15 passed**; the exact count can change as tests are added.
+round trips, the CSV-hash cache rebuild, deterministic multi-label split
+behavior, AUROC aggregation, the 138-task column contract, and embedding shape.
+Model-dependent tests are marked `slow` and skip when no checkpoint or dataset
+is available. The local suite currently reports **20 passed**; without a
+checkpoint it reports **19 passed, 1 skipped**.
+
+GitHub Actions runs the checkpoint-free suite on Python 3.10. The tests do not
+import DGL, so the workflow does not apply the GraphBolt stub. The workflow has
+not been executed on GitHub from this local environment.
 
 The notebook is output-free. To keep it that way, install `nbstripout` once:
 
@@ -257,8 +297,9 @@ git lfs track "results/embeddings/*.npy" "models/**/*.pt"
 git add .gitattributes
 ```
 
-The trained checkpoint and the 256-D embedding matrix are not included in this
-repository.
+The trained checkpoints and the 256-D embedding matrix are not included in this
+repository. The evaluation checkpoint is also local-only under
+`models/openpom_eval_split42/`.
 
 ## Reproducibility
 
@@ -269,6 +310,8 @@ repository.
 - The DeepChem featurization cache stores the source CSV SHA-256 and is rebuilt
   when that digest, the task columns, or the cache version changes.
 - The 256-D cosine matrix is cached as float32 and reused by the app.
+- The evaluation split, dataset hash, split hash, seed, epochs, and code commit
+  are recorded in `results/splits/split_seed42.json` and `results/metrics.json`.
 - Exact numerical reproduction also depends on the installed
   PyTorch/DGL/DeepChem versions and CPU/GPU kernels.
 

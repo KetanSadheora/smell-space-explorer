@@ -22,7 +22,7 @@ DATASET_URL = (
 EMBEDDINGS_FILENAME = "openpom_embeddings_256d.npy"
 METADATA_FILENAME = "molecules_metadata_umap.csv"
 SIMILARITY_FILENAME = "openpom_cosine_similarity_float32.npy"
-UMAP_FIGURE_FILENAME = "umap_odor_space.png"
+UMAP_FIGURE_FILENAME = "umap.png"
 
 DEFAULT_SEED = 42
 DEFAULT_TOP_K = 5
