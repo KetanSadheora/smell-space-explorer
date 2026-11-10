@@ -1,5 +1,11 @@
 # Smell Space Explorer
 
+![CI](https://github.com/KetanSadheora/smell-space-explorer/actions/workflows/tests.yml/badge.svg?branch=main)
+![Python](https://img.shields.io/badge/python-3.10-blue.svg)
+![Model](https://img.shields.io/badge/model-OpenPOM%20MPNN-purple.svg)
+![App](https://img.shields.io/badge/app-Streamlit-FF4B4B.svg)
+![Chemistry](https://img.shields.io/badge/chemistry-RDKit-013243.svg)
+
 Smell Space Explorer predicts human olfactory descriptors from molecular
 structure with **OpenPOM**, a multi-task message-passing neural network built on
 DeepChem, DGL-LifeSci, and RDKit. It maps each molecule to a 256-dimensional
