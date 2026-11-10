@@ -115,10 +115,10 @@ The curated CSV is downloaded automatically from the OpenPOM repository on
 first use and stored at `data/curated_GS_LF_merged_4983.csv`. It contains 4,983
 molecules and 138 binary odor descriptors.
 
-`data/` and `models/` contain only `.gitkeep` placeholders in Git; the release
-archives populate them. The `models/openpom_scaffold/` directory name is
-historical: that production checkpoint was trained on the full dataset, not on
-a scaffold split.
+`data/` and `models/` contain only `.gitkeep` placeholders in Git. The app
+downloads the curated CSV on demand, and the model release archive populates
+`models/`. The `models/openpom_scaffold/` directory name is historical: that
+production checkpoint was trained on the full dataset, not on a scaffold split.
 
 Paths can be overridden without editing code:
 
