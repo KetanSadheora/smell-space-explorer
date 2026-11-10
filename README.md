@@ -286,20 +286,34 @@ nbstripout --install
 
 ## Model weights and embeddings
 
-`models/*.pt`, `results/embeddings/*.npy`, and generated CSVs are git-ignored
-because they are large build artifacts. Publish them through a GitHub Release
-and document the download command, or track them with Git LFS if the host
-supports it:
+Large artifacts are distributed through the
+[v0.1.0 GitHub Release](https://github.com/KetanSadheora/smell-space-explorer/releases/tag/v0.1.0),
+not Git history:
 
-```bash
-git lfs install
-git lfs track "results/embeddings/*.npy" "models/**/*.pt"
-git add .gitattributes
+- [smell-space-models-v0.1.0.zip](https://github.com/KetanSadheora/smell-space-explorer/releases/download/v0.1.0/smell-space-models-v0.1.0.zip)
+  — production and evaluation checkpoints, training summary, split and metrics.
+- [smell-space-embeddings-v0.1.0.zip](https://github.com/KetanSadheora/smell-space-explorer/releases/download/v0.1.0/smell-space-embeddings-v0.1.0.zip)
+  — 256-D embeddings, cached float32 cosine matrix, and UMAP metadata.
+- [SHA256SUMS.txt](https://github.com/KetanSadheora/smell-space-explorer/releases/download/v0.1.0/SHA256SUMS.txt)
+
+```text
+0D767B2A99B1B7FD644EF500B2E77389122C7E245E1470CD85E8AED423F98DDD  smell-space-embeddings-v0.1.0.zip
+F1C5EF8816DCD302DBF2F2EBEC202EFEEA8B7B9642777DB72A00EF7026F35B24  smell-space-models-v0.1.0.zip
 ```
 
-The trained checkpoints and the 256-D embedding matrix are not included in this
-repository. The evaluation checkpoint is also local-only under
-`models/openpom_eval_split42/`.
+Extract the model archive at the repository root so the paths become:
+
+```text
+models/openpom_scaffold/checkpoint1.pt
+models/openpom_eval_split42/checkpoint1.pt
+results/embeddings/openpom_embeddings_256d.npy
+results/embeddings/openpom_cosine_similarity_float32.npy
+results/embeddings/molecules_metadata_umap.csv
+```
+
+`models/*.pt` and `results/embeddings/*.npy` remain git-ignored; do not commit
+the extracted files. The production checkpoint was trained on the full dataset,
+while the evaluation checkpoint is the held-out model described above.
 
 ## Reproducibility
 
@@ -336,9 +350,9 @@ This project builds directly on:
 ## License
 
 This repository's original code is released under the MIT License; see
-[LICENSE](LICENSE). **TODO:** verify that the OpenPOM code and model weights and
-the GoodScents/Leffingwell-derived dataset permit redistribution and commercial
-use under compatible terms before publishing artifacts.
+[LICENSE](LICENSE). OpenPOM, its model weights, and the
+GoodScents/Leffingwell-derived dataset remain subject to their respective
+upstream terms.
 
 ## Limitations
 

@@ -2,11 +2,9 @@ MIT License
 
 Copyright (c) 2026 Smell Space Explorer contributors
 
-TODO: Before distributing this repository or its artifacts, verify that the
-OpenPOM source/license, any OpenPOM model weights, and the GoodScents /
-Leffingwell-derived curated dataset may be redistributed under compatible
-terms. This MIT license covers this repository's original code only; it does
-not override upstream licenses or dataset terms.
+This MIT license covers this repository's original code. OpenPOM, any OpenPOM
+model weights, and the GoodScents / Leffingwell-derived curated dataset remain
+subject to their respective upstream terms.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
