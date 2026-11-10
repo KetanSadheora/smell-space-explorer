@@ -21,6 +21,18 @@ structurally dissimilar (low Morgan/Tanimoto similarity) but perceptually close
 
 ![Streamlit interface showing vanillin and its curated olfactory profile](results/figures/streamlit_app.png)
 
+## Quick start
+
+```bash
+git clone https://github.com/KetanSadheora/smell-space-explorer
+cd smell-space-explorer
+# install (see Installation), then download and extract the v0.1.0 release zips at the repo root
+streamlit run app/streamlit_app.py
+```
+
+**Held-out test macro AUROC: 0.862** across 138 odor descriptors (stratified
+80/10/10 split, seed 42).
+
 ## Project structure
 
 ```text
@@ -102,6 +114,11 @@ globally, so apply it only when the import error requires it.
 The curated CSV is downloaded automatically from the OpenPOM repository on
 first use and stored at `data/curated_GS_LF_merged_4983.csv`. It contains 4,983
 molecules and 138 binary odor descriptors.
+
+`data/` and `models/` contain only `.gitkeep` placeholders in Git; the release
+archives populate them. The `models/openpom_scaffold/` directory name is
+historical: that production checkpoint was trained on the full dataset, not on
+a scaffold split.
 
 Paths can be overridden without editing code:
 
@@ -260,6 +277,11 @@ are not held-out predictions. Only the numbers above, from
   acids), not duplicate source records. The test macro AUROC (0.86195) is not
   anomalously high; no split or metric was changed after this check.
 
+> The split is a random multi-label stratified split, so some test molecules
+> have close structural relatives in the training set. Treat **0.862** as an
+> optimistic estimate of generalization to genuinely new chemistry. A scaffold
+> split would be a harder, more realistic test and is a planned next step.
+
 ## Tests
 
 ```bash
@@ -275,8 +297,9 @@ is available. The local suite currently reports **20 passed**; without a
 checkpoint it reports **19 passed, 1 skipped**.
 
 GitHub Actions runs the checkpoint-free suite on Python 3.10. The tests do not
-import DGL, so the workflow does not apply the GraphBolt stub. The workflow has
-not been executed on GitHub from this local environment.
+import DGL, so the workflow does not apply the GraphBolt stub. The latest `main`
+commit passes CI; the [Actions tab](https://github.com/KetanSadheora/smell-space-explorer/actions)
+has the full history.
 
 The notebook is output-free. To keep it that way, install `nbstripout` once:
 
@@ -297,11 +320,11 @@ not Git history:
 - [SHA256SUMS.txt](https://github.com/KetanSadheora/smell-space-explorer/releases/download/v0.1.0/SHA256SUMS.txt)
 
 ```text
-0D767B2A99B1B7FD644EF500B2E77389122C7E245E1470CD85E8AED423F98DDD  smell-space-embeddings-v0.1.0.zip
-F1C5EF8816DCD302DBF2F2EBEC202EFEEA8B7B9642777DB72A00EF7026F35B24  smell-space-models-v0.1.0.zip
+EFD57225F9C5EB02C3C953586A899B61A30A93F31E6BD429AF4DC2E3256199AB  smell-space-embeddings-v0.1.0.zip
+F5F4F76A0FF556FFB5A555C29CC47FEE05B5BEAF8DC58576D2D803F5BFAD2723  smell-space-models-v0.1.0.zip
 ```
 
-Extract the model archive at the repository root so the paths become:
+Extract **both** archives at the repository root so the paths become:
 
 ```text
 models/openpom_scaffold/checkpoint1.pt

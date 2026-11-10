@@ -57,10 +57,15 @@ def load_artifacts() -> tuple[
     list[str],
     np.ndarray,
 ]:
-    """Load embeddings, metadata, labels, and task names once per process."""
+    """Load embeddings, metadata, labels, and task names once per process.
+
+    The curated CSV is not distributed in the repository or release archives.
+    ``load_curated_dataframe`` downloads it on demand, so only the embedding
+    artifacts are required at startup.
+    """
     missing = [
         str(path)
-        for path in (EMBEDDINGS_PATH, METADATA_PATH, DATASET_PATH)
+        for path in (EMBEDDINGS_PATH, METADATA_PATH)
         if not path.exists()
     ]
     if missing:
