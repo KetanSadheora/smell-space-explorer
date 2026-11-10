@@ -339,3 +339,17 @@ This repository's original code is released under the MIT License; see
 [LICENSE](LICENSE). **TODO:** verify that the OpenPOM code and model weights and
 the GoodScents/Leffingwell-derived dataset permit redistribution and commercial
 use under compatible terms before publishing artifacts.
+
+## Limitations
+
+Predictions are produced by a model trained on roughly 5,000 molecules and are
+**not experimental ground truth**. Odor perception is context-dependent,
+subject-dependent, and can be influenced by concentration and mixtures. The
+training labels are aggregated from heterogeneous sources and are sparse;
+many descriptors have few positives. A high cosine similarity in OpenPOM space
+is a model-based hypothesis, not proof that two molecules smell alike.
+Out-of-distribution chemistries — especially large, unusual, or poorly
+represented scaffolds — are expected to be less reliable and may still produce
+confident-looking probabilities. Do not use this project for safety, toxicity,
+allergenicity, regulatory, or formulation decisions without independent
+experimental validation.
