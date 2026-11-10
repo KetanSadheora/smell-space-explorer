@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import random
+import time
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -214,7 +215,15 @@ def train_model(
     evaluations_without_improvement = 0
 
     for epoch in range(1, epochs + 1):
+        epoch_start = time.perf_counter()
         loss = model.fit(train_dataset, nb_epoch=1)
+        epoch_seconds = time.perf_counter() - epoch_start
+        logger.info(
+            "Epoch %02d/%02d complete in %.1f s",
+            epoch,
+            epochs,
+            epoch_seconds,
+        )
         if epoch % eval_every == 0 or epoch == 1 or epoch == epochs:
             train_metrics = model.evaluate(
                 train_eval_dataset,

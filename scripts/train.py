@@ -3,13 +3,20 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
+import math
 from pathlib import Path
 
 from openpom.utils.data_utils import get_class_imbalance_ratio
 
-from smell_space.config import MODEL_DIR, ensure_directories
-from smell_space.data import get_dataset
+from smell_space.config import DATASET_PATH, MODEL_DIR, ensure_directories
+from smell_space.data import (
+    get_dataset,
+    load_split,
+    sha256_file,
+    subset_dataset,
+)
 from smell_space.model import (
     build_model,
     set_global_seed,
@@ -65,6 +72,15 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--split-file",
+        type=Path,
+        default=None,
+        help=(
+            "Saved split JSON containing train/valid/test indices. Training "
+            "uses only train and valid; test is never evaluated here."
+        ),
+    )
+    parser.add_argument(
         "--early-stopping-patience",
         type=int,
         default=0,
@@ -98,9 +114,15 @@ def main() -> None:
     )
     args = parse_args()
     ensure_directories()
-    if args.early_stopping_patience > 0 and args.valid_fraction <= 0:
+    if args.split_file is not None and args.valid_fraction > 0:
+        raise ValueError("--split-file and --valid-fraction are mutually exclusive.")
+    if (
+        args.early_stopping_patience > 0
+        and args.valid_fraction <= 0
+        and args.split_file is None
+    ):
         raise ValueError(
-            "--early-stopping-patience requires a non-zero --valid-fraction."
+            "--early-stopping-patience requires --valid-fraction or --split-file."
         )
     if args.seed is not None:
         set_global_seed(args.seed)
@@ -109,7 +131,31 @@ def main() -> None:
     dataset, task_columns, _ = get_dataset()
     logger.info("Dataset: %d molecules, %d tasks", len(dataset), len(task_columns))
 
-    if args.valid_fraction > 0:
+    split_record = None
+    if args.split_file is not None:
+        split_record = load_split(args.split_file)
+        dataset_hash = sha256_file(DATASET_PATH)
+        if split_record["dataset_sha256"] != dataset_hash:
+            raise ValueError(
+                "Split file dataset_sha256 does not match the current CSV."
+            )
+        train_dataset = subset_dataset(
+            dataset,
+            split_record["indices"]["train"],
+        )
+        valid_dataset = subset_dataset(
+            dataset,
+            split_record["indices"]["valid"],
+        )
+        logger.info(
+            "Using split %s (hash %s): train=%d valid=%d test=%d (test unused)",
+            args.split_file,
+            split_record["split_hash"],
+            len(train_dataset),
+            len(valid_dataset),
+            len(split_record["indices"]["test"]),
+        )
+    elif args.valid_fraction > 0:
         train_dataset, valid_dataset = split_train_valid_dataset(
             dataset,
             args.valid_fraction,
@@ -159,7 +205,27 @@ def main() -> None:
         seed=args.seed,
     )
     model.save_checkpoint()
-    logger.info("Saved checkpoint to %s", args.model_dir)
+    steps_per_epoch = math.ceil(len(train_dataset) / model.batch_size)
+    global_step = int(model.get_global_step())
+    summary = {
+        "model_dir": str(args.model_dir),
+        "epochs_requested": args.epochs,
+        "global_step": global_step,
+        "steps_per_epoch": steps_per_epoch,
+        "epochs_completed": global_step / steps_per_epoch,
+        "early_stopping_patience": args.early_stopping_patience,
+        "seed": args.seed,
+        "train_size": len(train_dataset),
+        "valid_size": len(valid_dataset),
+        "split_hash": (
+            split_record["split_hash"] if split_record is not None else None
+        ),
+    }
+    (args.model_dir / "training_summary.json").write_text(
+        json.dumps(summary, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    logger.info("Saved checkpoint and training summary to %s", args.model_dir)
 
 
 if __name__ == "__main__":

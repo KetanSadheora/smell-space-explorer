@@ -177,6 +177,159 @@ def _remove_cache(cache_dir: Path) -> None:
         ) from error
 
 
+def make_stratified_splits(
+    labels: np.ndarray,
+    *,
+    seed: int = 42,
+) -> dict[str, np.ndarray]:
+    """Create a deterministic multi-label stratified 80/10/10 split.
+
+    The labels are partitioned into ten multi-label stratified folds with
+    ``iterstrat``. Two folds whose sizes are closest to one tenth of the data
+    become validation and test; the remaining eight folds form training. This
+    keeps the requested proportions while preserving label stratification.
+    """
+    from itertools import combinations
+
+    from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
+
+    labels = np.asarray(labels)
+    if labels.ndim != 2 or len(labels) < 10:
+        raise ValueError("labels must be a 2-D matrix with at least 10 rows.")
+
+    splitter = MultilabelStratifiedKFold(
+        n_splits=10,
+        shuffle=True,
+        random_state=seed,
+    )
+    folds = [
+        np.sort(test_indices).astype(np.int64)
+        for _, test_indices in splitter.split(np.zeros((len(labels), 1)), labels)
+    ]
+
+    target = len(labels) / 10.0
+    selected_valid, selected_test = min(
+        combinations(range(10), 2),
+        key=lambda pair: (
+            abs(len(folds[pair[0]]) - target)
+            + abs(len(folds[pair[1]]) - target),
+            pair,
+        ),
+    )
+    test_indices = folds[selected_test]
+    valid_indices = folds[selected_valid]
+    train_indices = np.sort(
+        np.concatenate(
+            [
+                fold
+                for index, fold in enumerate(folds)
+                if index not in (selected_valid, selected_test)
+            ]
+        )
+    )
+
+    splits = {
+        "train": train_indices.astype(np.int64),
+        "valid": valid_indices.astype(np.int64),
+        "test": test_indices.astype(np.int64),
+    }
+
+    all_indices = np.concatenate(list(splits.values()))
+    if len(all_indices) != len(np.unique(all_indices)):
+        raise RuntimeError("The generated splits contain overlapping indices.")
+    if sorted(all_indices.tolist()) != list(range(len(labels))):
+        raise RuntimeError("The generated splits do not cover every molecule.")
+    return splits
+
+
+def split_digest(
+    indices: dict[str, np.ndarray],
+    dataset_sha256: str,
+    seed: int,
+) -> str:
+    """Return a stable hash for a split definition and dataset version."""
+    payload = {
+        "dataset_sha256": dataset_sha256,
+        "seed": seed,
+        "indices": {
+            name: [int(value) for value in values]
+            for name, values in sorted(indices.items())
+        },
+    }
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def save_split(
+    path: Path,
+    indices: dict[str, np.ndarray],
+    dataset_sha256: str,
+    *,
+    seed: int = 42,
+) -> dict[str, Any]:
+    """Persist split indices, sizes, dataset hash, and split hash as JSON."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    record = {
+        "seed": seed,
+        "method": (
+            "MultilabelStratifiedKFold(n_splits=10, shuffle=True, "
+            f"random_state={seed})"
+        ),
+        "fractions": {"train": 0.8, "valid": 0.1, "test": 0.1},
+        "dataset_sha256": dataset_sha256,
+        "n_molecules": int(sum(len(values) for values in indices.values())),
+        "sizes": {
+            name: int(len(values))
+            for name, values in sorted(indices.items())
+        },
+        "split_hash": split_digest(indices, dataset_sha256, seed),
+        "indices": {
+            name: [int(value) for value in values]
+            for name, values in sorted(indices.items())
+        },
+    }
+    path.write_text(
+        json.dumps(record, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    return record
+
+
+def load_split(path: Path) -> dict[str, Any]:
+    """Load a saved split JSON and return its record with NumPy indices."""
+    record = json.loads(Path(path).read_text(encoding="utf-8"))
+    required = {"seed", "dataset_sha256", "split_hash", "indices"}
+    missing = required - set(record)
+    if missing:
+        raise ValueError(f"Split file is missing fields: {sorted(missing)}.")
+    record["indices"] = {
+        name: np.asarray(values, dtype=np.int64)
+        for name, values in record["indices"].items()
+    }
+    for name in ("train", "valid", "test"):
+        if name not in record["indices"]:
+            raise ValueError(f"Split file does not define {name!r}.")
+    return record
+
+
+def subset_dataset(dataset: Any, indices: np.ndarray) -> Any:
+    """Return a NumpyDataset subset for the given integer indices."""
+    import deepchem as dc
+
+    indices = np.asarray(indices, dtype=np.int64)
+    return dc.data.NumpyDataset(
+        X=dataset.X[indices],
+        y=dataset.y[indices],
+        w=dataset.w[indices],
+        ids=[dataset.ids[index] for index in indices],
+    )
+
+
 def get_dataset(
     csv_path: Path = DATASET_PATH,
     cache_dir: Path = DISK_DATASET_DIR,

@@ -58,6 +58,13 @@ RETRIEVAL_DIR = RESULTS_DIR / "retrieval"
 CROSS_SCAFFOLD_CSV_PATH = RETRIEVAL_DIR / "cross_scaffold_pairs.csv"
 CROSS_SCAFFOLD_FIGURE_PATH = FIGURES_DIR / "cross_scaffold_pairs.png"
 
+SPLITS_DIR = RESULTS_DIR / "splits"
+SPLIT_PATH = SPLITS_DIR / "split_seed42.json"
+LABEL_PREVALENCE_PATH = SPLITS_DIR / "label_prevalence_seed42.csv"
+METRICS_PATH = RESULTS_DIR / "metrics.json"
+METRICS_PER_TASK_PATH = RESULTS_DIR / "metrics_per_task.csv"
+
+
 
 def ensure_directories() -> None:
     """Create the writable directories used by the project."""
@@ -68,5 +75,6 @@ def ensure_directories() -> None:
         EMBEDDINGS_DIR,
         FIGURES_DIR,
         RETRIEVAL_DIR,
+        SPLITS_DIR,
     ):
         directory.mkdir(parents=True, exist_ok=True)
